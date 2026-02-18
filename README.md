@@ -1,0 +1,112 @@
+# Builder Kit
+
+[![create-shape-app](https://img.shields.io/npm/v/create-shape-app?label=create-shape-app)](https://www.npmjs.com/package/create-shape-app)
+[![license](https://img.shields.io/github/license/shape-network/builder-kit)](./LICENSE)
+
+Onchain starter for [Shape](https://shape.network) with a minimal monorepo:
+- `apps/web` (Next.js + wagmi)
+- `packages/contract` (Hardhat)
+
+Live site: [builder-kit.vercel.app](https://builder-kit.vercel.app/)
+
+## Deploy on Vercel
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/shape-network/builder-kit&root-directory=apps%2Fweb)
+
+Set these project env vars in Vercel after import:
+- `NEXT_PUBLIC_ALCHEMY_KEY`
+- `NEXT_PUBLIC_CHAIN_ID` (`11011` or `360`)
+- `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` (optional)
+
+## Quick Start (15-Min First Tx)
+
+### Prerequisites
+
+- Node `v20.18.0` (`cat .nvmrc`)
+- Bun `1.3.6+`
+- `NEXT_PUBLIC_ALCHEMY_KEY`
+- `DEPLOYER_PRIVATE_KEY` (funded on Shape Sepolia)
+
+### 1) Scaffold project
+
+```bash
+bun create shape-app my-app --yes
+cd my-app
+```
+
+Other package managers:
+- `npm create shape-app@latest my-app -- --yes`
+- `pnpm dlx create-shape-app my-app --yes`
+- `yarn create shape-app my-app --yes`
+
+### 2) Configure env
+
+```bash
+cp apps/web/.env-example apps/web/.env
+cp packages/contract/.env-example packages/contract/.env
+```
+
+Required values:
+- `apps/web/.env`
+  - `NEXT_PUBLIC_ALCHEMY_KEY`
+  - `NEXT_PUBLIC_CHAIN_ID=11011`
+  - `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` (optional)
+- `packages/contract/.env`
+  - `DEPLOYER_PRIVATE_KEY`
+  - `SHAPE_SEPOLIA_RPC_URL` (default is fine)
+
+### 3) Build + test contracts
+
+```bash
+bun contracts:compile
+bun contracts:test
+```
+
+### 4) Deploy to Shape Sepolia
+
+```bash
+bun contracts:deploy:shape-sepolia
+```
+
+### 5) Run web app
+
+```bash
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000), then `/debug/contracts`.
+
+### 6) Send first tx
+
+1. Connect wallet.
+2. Switch to Shape Sepolia (`11011`).
+3. Enter a new message on `/debug/contracts`.
+4. Click `Set Message` and confirm.
+5. Wait for `Confirmed`.
+
+## Command Reference
+
+- `bun dev` run web app (`apps/web`)
+- `bun build` build web app
+- `bun start` start built web app
+- `bun test` run web + contract tests
+- `bun lint` lint web app
+- `bun type-check` type-check web app
+- `bun check` run lint + type-check + tests
+- `bun contracts:compile` compile + regenerate contract artifacts
+- `bun contracts:test` run contract tests
+- `bun contracts:deploy:shape-sepolia` deploy HelloShape to Shape Sepolia
+- `bun contracts:artifact` regenerate deployment artifacts consumed by web
+- `bun wagmi:generate` regenerate wagmi typed ABI/hooks
+
+## Community
+
+- Contribution guide: `CONTRIBUTING.md`
+- Security policy: `SECURITY.md`
+- Code of conduct: `CODE_OF_CONDUCT.md`
+
+## Support
+
+- [Shape docs](https://docs.shape.network)
+- [Shape Discord](http://discord.com/invite/shape-l2)
+- [@williamhzo](https://x.com/williamhzo)
