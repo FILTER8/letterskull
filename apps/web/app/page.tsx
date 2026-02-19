@@ -336,13 +336,13 @@ export default function Home() {
         <div className="text-muted-foreground max-w-2xl space-y-3 text-base leading-relaxed">
           <p>Every Skull is born from a Letter.</p>
           <p>
-            The contract binds them 1:1 — a Skull can only exist if you hold its
+            The contract binds them 1:1 - a Skull can only exist if you hold its
             corresponding Letter token. The Letter’s tokenId becomes the seed.
             The seed shapes the form. The form becomes the Skull.
           </p>
           <p>
             No metadata servers. No IPFS dependencies. The SVG, the palette, the
-            composition — everything is generated and stored fully on-chain.
+            composition - everything is generated and stored fully on-chain.
             Immutable. Deterministic. Eternal.
           </p>
         </div>
@@ -411,7 +411,7 @@ export default function Home() {
                   href="https://letters.shape.network/"
                   target="_blank"
                   rel="noreferrer"
-                  className="block w-full rounded-xl border bg-muted px-6 py-10 text-center text-2xl font-bold tracking-tight hover:bg-muted/70"
+                  className="block w-full  border bg-muted px-6 py-10 text-center text-2xl font-bold tracking-tight hover:bg-muted/70"
                 >
                   A LETTER FOR YOU
                 </a>
@@ -452,7 +452,7 @@ export default function Home() {
                               <img
                                 src={it.letterImageUrl}
                                 alt={it.letterName ?? "Letter"}
-                                className="mx-auto w-full rounded-xl border"
+                                className="mx-auto w-full  border"
                               />
                             ) : (
                               <div className="text-muted-foreground text-sm">
@@ -514,7 +514,7 @@ export default function Home() {
 
                           {/* ✅ BIG Skull */}
                           {minted && it.skullTokenId !== ZERO && (
-                            <div className="bg-muted rounded-lg p-4 flex justify-center">
+                            <div className="bg-muted  p-4 flex justify-center">
                               {it.skullSvg ? (
                                 <div
                                   className="
@@ -607,13 +607,13 @@ export default function Home() {
                     </CardHeader>
 
                     <CardContent className="space-y-3">
-                      <div className="bg-muted rounded-lg p-3">
+                      <div className="bg-muted  p-3">
                         {it.letterImageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={it.letterImageUrl}
                             alt={it.letterName ?? "Letter"}
-                            className="mx-auto h-auto w-full max-w-[260px] rounded-md"
+                            className="mx-auto h-auto w-full max-w-[260px] "
                           />
                         ) : (
                           <div className="text-muted-foreground text-sm">
@@ -623,7 +623,7 @@ export default function Home() {
                       </div>
 
                       {minted && it.skullTokenId !== ZERO && (
-                        <div className="bg-muted rounded-lg p-3 flex justify-center">
+                        <div className="bg-muted p-3 flex justify-center">
                           {it.skullSvg ? (
                             <div
                               className="
@@ -675,7 +675,7 @@ export default function Home() {
 
           <div className="flex w-full items-center gap-2 sm:w-[360px]">
             <input
-              className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
+              className="border-input bg-background h-10 w-full border px-3 text-sm"
               value={donationEth}
               onChange={(e) => setDonationEth(e.target.value)}
               inputMode="decimal"

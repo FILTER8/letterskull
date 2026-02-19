@@ -36,7 +36,7 @@ const SHAPE_SEPOLIA_PUBLIC = "https://sepolia.shape.network"; // if this ever fa
 const ETH_PUBLIC = "https://cloudflare-eth.com";
 
 export const wagmiConfig = createConfig({
-  chains: [shape, shapeSepolia, mainnet],
+  chains: [shape],
   connectors,
   ssr: true,
   transports: {
@@ -44,14 +44,6 @@ export const wagmiConfig = createConfig({
     [shape.id]: fallback([
       http(`https://shape-mainnet.g.alchemy.com/v2/${config.alchemyKey}`, { batch: false }),
       http(SHAPE_PUBLIC, { batch: false }),
-    ]),
-    [shapeSepolia.id]: fallback([
-      http(`https://shape-sepolia.g.alchemy.com/v2/${config.alchemyKey}`, { batch: false }),
-      http(SHAPE_SEPOLIA_PUBLIC, { batch: false }),
-    ]),
-    [mainnet.id]: fallback([
-      http(`https://eth-mainnet.g.alchemy.com/v2/${config.alchemyKey}`, { batch: false }),
-      http(ETH_PUBLIC, { batch: false }),
     ]),
   },
 });
