@@ -18,8 +18,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { config } from "@/lib/config";
+import Link from "next/link";
 
 const ZERO = BigInt(0);
+const ONE = BigInt(1);
+
+const LETTER_ADDRESS =
+  "0xb8261f4431928F176c5A07887c8fcAcCd13c6D16" as const;
 
 const LETTER_SKULL_ADDRESS =
   "0x75A9bd203aFbB4D8FB233372d1D9Ea30E0F1Adfd" as const;
@@ -70,6 +76,25 @@ const LETTER_SKULL_ABI = [
     inputs: [{ name: "letterTokenId", type: "uint256" }],
     outputs: [{ name: "skullTokenId", type: "uint256" }],
   },
+  // ✅ used for global minted count
+  {
+    type: "function",
+    name: "nextTokenId",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
+
+// Optional on-chain totalSupply() (only works if Letter implements it)
+const LETTER_ABI = [
+  {
+    type: "function",
+    name: "totalSupply",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ] as const;
 
 type Item = {
@@ -116,6 +141,28 @@ function toErrorMessage(err: unknown) {
   }
 }
 
+type AlchemyGetNFTsForContractResponse = {
+  nfts?: Array<{
+    contract?: {
+      totalSupply?: string | null;
+    };
+  }>;
+  contract?: {
+    totalSupply?: string | null;
+  };
+};
+
+function parseBigIntSafe(v: unknown): bigint | null {
+  try {
+    if (typeof v === "bigint") return v;
+    if (typeof v === "number" && Number.isFinite(v)) return BigInt(v);
+    if (typeof v === "string" && v.trim() !== "") return BigInt(v.trim());
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
   const { address, isConnected, chain } = useAccount();
 
@@ -133,11 +180,76 @@ export default function Home() {
   const [donationEth, setDonationEth] = useState("0");
   const [toast, setToast] = useState<string | null>(null);
 
+  const [globalStats, setGlobalStats] = useState<{
+    skullsMinted: bigint | null;
+    lettersMinted: bigint | null;
+  }>({ skullsMinted: null, lettersMinted: null });
+
+  async function fetchLettersTotalSupplyFromAlchemy(): Promise<bigint | null> {
+    // Uses the same endpoint you tested in sandbox
+    // Note: works only if your Alchemy key has NFT API access.
+    if (!config.alchemyKey) return null;
+
+    const url = `https://shape-mainnet.g.alchemy.com/nft/v3/${config.alchemyKey}/getNFTsForContract?contractAddress=${LETTER_ADDRESS}&withMetadata=false`;
+
+    try {
+      const res = await fetch(url, { method: "GET" });
+      if (!res.ok) return null;
+
+      const json = (await res.json()) as AlchemyGetNFTsForContractResponse;
+
+      // Some responses put it on json.contract.totalSupply, some under nfts[0].contract.totalSupply
+      const totalSupplyStr =
+        json?.contract?.totalSupply ??
+        json?.nfts?.[0]?.contract?.totalSupply ??
+        null;
+
+      return parseBigIntSafe(totalSupplyStr);
+    } catch {
+      return null;
+    }
+  }
+
+  async function loadGlobalStats() {
+    if (!publicClient) return;
+
+    try {
+      // Skulls minted = nextTokenId - 1
+      const nextTokenId = (await publicClient.readContract({
+        address: LETTER_SKULL_ADDRESS,
+        abi: LETTER_SKULL_ABI,
+        functionName: "nextTokenId",
+        args: [],
+      })) as bigint;
+
+      const skullsMinted = nextTokenId > ONE ? nextTokenId - ONE : ZERO;
+
+      // Letters minted:
+      // 1) try on-chain totalSupply()
+      // 2) fallback to Alchemy REST (your tested endpoint)
+      let lettersMinted: bigint | null = null;
+
+      try {
+        lettersMinted = (await publicClient.readContract({
+          address: LETTER_ADDRESS,
+          abi: LETTER_ABI,
+          functionName: "totalSupply",
+          args: [],
+        })) as bigint;
+      } catch {
+        lettersMinted = await fetchLettersTotalSupplyFromAlchemy();
+      }
+
+      setGlobalStats({ skullsMinted, lettersMinted });
+    } catch {
+      // don’t hard fail UI
+    }
+  }
+
   async function hydrateSkulls(current: Item[]) {
     if (!publicClient) return;
     if (current.length === 0) return;
 
-    // mark loading
     setItems((prev) => prev.map((x) => ({ ...x, loading: true })));
 
     const next: Item[] = await Promise.all(
@@ -160,7 +272,6 @@ export default function Home() {
 
           const minted = usedLetter || skullTokenId !== ZERO;
 
-          // If contract says used but skullOfLetter is 0, still disable mint (failsafe).
           if (!minted || skullTokenId === ZERO) {
             return {
               ...it,
@@ -205,7 +316,6 @@ export default function Home() {
             loading: false,
           };
         } catch {
-          // If reads fail, keep item but stop loading (don’t incorrectly show mintable forever)
           return { ...it, loading: false };
         }
       })
@@ -232,18 +342,20 @@ export default function Home() {
       if (!res.ok) {
         const msg =
           typeof json === "object" && json !== null && "error" in json
-            ? String((json as { error?: unknown }).error ?? "Failed to fetch letters")
+            ? String(
+                (json as { error?: unknown }).error ?? "Failed to fetch letters"
+              )
             : "Failed to fetch letters";
         throw new Error(msg);
       }
 
       const letters =
         typeof json === "object" && json !== null && "letters" in json
-          ? ((json as { letters?: unknown }).letters as Array<{
+          ? (((json as { letters?: unknown }).letters as Array<{
               tokenId: string;
               name?: string | null;
               imageUrl?: string | null;
-            }>) ?? []
+            }>) ?? [])
           : [];
 
       const parsed = letters
@@ -279,6 +391,12 @@ export default function Home() {
   }
 
   useEffect(() => {
+    // load global stats once (and again on mint confirm later)
+    loadGlobalStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     if (isConnected && address) loadLettersFromApi();
     else setItems([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -288,6 +406,7 @@ export default function Home() {
     if (isConfirmed) {
       setToast("✅ Mint confirmed");
       hydrateSkulls(items);
+      loadGlobalStats();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirmed]);
@@ -309,29 +428,42 @@ export default function Home() {
   const hasLetters = items.length > 0;
 
   const mintableCount = useMemo(() => {
-    return items.filter((x) => !x.loading && !x.usedLetter && x.skullTokenId === ZERO)
-      .length;
+    return items.filter(
+      (x) => !x.loading && !x.usedLetter && x.skullTokenId === ZERO
+    ).length;
   }, [items]);
 
   return (
     <div className="space-y-8 pb-[220px]">
       <div className="space-y-4">
-        <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
-          LetterSkull
-        </h1>
+        <div className="space-y-2">
+          <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
+  LetterSkull{" "}
+  <span className="text-lg font-medium text-muted-foreground sm:text-2xl">
+     minted Skulls:{" "}
+    <span className="text-foreground">
+      {globalStats.skullsMinted?.toString() ?? "—"}
+    </span>{" "}
+    • Letters:{" "}
+    <span className="text-foreground">
+      {globalStats.lettersMinted?.toString() ?? "—"}
+    </span>
+  </span>
+</h1>
 
-        <p className="text-muted-foreground max-w-2xl text-lg">
-          A SKULL FOR YOU — a fully on-chain generative art project by{" "}
-          <a
-            href="https://x.com/0xfilter8"
-            target="_blank"
-            rel="noreferrer"
-            className="underline underline-offset-4 hover:text-foreground transition-colors"
-          >
-            filter8
-          </a>
-          .
-        </p>
+          <p className="text-muted-foreground max-w-2xl text-lg">
+            A SKULL FOR YOU — a fully on-chain generative art project by{" "}
+            <a
+              href="https://x.com/0xfilter8"
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-4 hover:text-foreground transition-colors"
+            >
+              filter8
+            </a>
+            .
+          </p>
+        </div>
 
         <div className="text-muted-foreground max-w-2xl space-y-3 text-base leading-relaxed">
           <p>Every Skull is born from a Letter.</p>
@@ -345,6 +477,12 @@ export default function Home() {
             composition - everything is generated and stored fully on-chain.
             Immutable. Deterministic. Eternal.
           </p>
+<Link
+  href="/skulls"
+  className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
+>
+  View Skull Gallery →
+</Link>
         </div>
       </div>
 
@@ -368,7 +506,10 @@ export default function Home() {
         <div className="space-y-6">
           <div className="flex flex-wrap items-center gap-3">
             <Button
-              onClick={loadLettersFromApi}
+              onClick={() => {
+                loadLettersFromApi();
+                loadGlobalStats();
+              }}
               variant="secondary"
               disabled={loadingLetters}
             >
@@ -411,7 +552,7 @@ export default function Home() {
                   href="https://letters.shape.network/"
                   target="_blank"
                   rel="noreferrer"
-                  className="block w-full  border bg-muted px-6 py-10 text-center text-2xl font-bold tracking-tight hover:bg-muted/70"
+                  className="block w-full border bg-muted px-6 py-10 text-center text-2xl font-bold tracking-tight hover:bg-muted/70"
                 >
                   A LETTER FOR YOU
                 </a>
@@ -452,7 +593,7 @@ export default function Home() {
                               <img
                                 src={it.letterImageUrl}
                                 alt={it.letterName ?? "Letter"}
-                                className="mx-auto w-full  border"
+                                className="mx-auto w-full border"
                               />
                             ) : (
                               <div className="text-muted-foreground text-sm">
@@ -512,9 +653,9 @@ export default function Home() {
                             )}
                           </div>
 
-                          {/* ✅ BIG Skull */}
+                          {/* BIG Skull */}
                           {minted && it.skullTokenId !== ZERO && (
-                            <div className="bg-muted  p-4 flex justify-center">
+                            <div className="bg-muted p-4 flex justify-center">
                               {it.skullSvg ? (
                                 <div
                                   className="
@@ -525,7 +666,9 @@ export default function Home() {
                                     [&>svg]:h-full
                                   "
                                   style={{ imageRendering: "pixelated" }}
-                                  dangerouslySetInnerHTML={{ __html: it.skullSvg }}
+                                  dangerouslySetInnerHTML={{
+                                    __html: it.skullSvg,
+                                  }}
                                 />
                               ) : (
                                 <div className="text-muted-foreground text-sm">
@@ -552,7 +695,7 @@ export default function Home() {
                   );
                 }
 
-                // ✅ multi-letter grid card
+                // multi-letter grid card
                 return (
                   <Card
                     key={it.letterTokenId.toString()}
@@ -607,13 +750,13 @@ export default function Home() {
                     </CardHeader>
 
                     <CardContent className="space-y-3">
-                      <div className="bg-muted  p-3">
+                      <div className="bg-muted p-3">
                         {it.letterImageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={it.letterImageUrl}
                             alt={it.letterName ?? "Letter"}
-                            className="mx-auto h-auto w-full max-w-[260px] "
+                            className="mx-auto h-auto w-full max-w-[260px]"
                           />
                         ) : (
                           <div className="text-muted-foreground text-sm">
@@ -634,7 +777,9 @@ export default function Home() {
                                 [&>svg]:h-full
                               "
                               style={{ imageRendering: "pixelated" }}
-                              dangerouslySetInnerHTML={{ __html: it.skullSvg }}
+                              dangerouslySetInnerHTML={{
+                                __html: it.skullSvg,
+                              }}
                             />
                           ) : (
                             <div className="text-muted-foreground text-sm">
